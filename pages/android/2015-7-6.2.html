@@ -121,7 +121,8 @@ public class Crypto {
         }
     }
 
-    // rsaEncrypt encrypt data use rsa algorithm and base64 encode result.
+    // rsaEncrypt encrypt data use rsa algorithm.
+    // 这里需要传入modulus和publicexponents。
     public static Result&ltbyte[]&gt rsaEncrypt(String rsaMod, String rsaPub, byte[] text) {
         Result&ltPublicKey&gt publicKey = getPublicKey(rsaMod, rsaPub);
         if (publicKey.Error != null) {
@@ -145,6 +146,7 @@ public class Crypto {
     }
 
     // rsaDecrypt decrypt data use rsa algorithm.
+    // 这里和golang不同，只需要传入modulus和exponents就可以。
     public static Result&ltbyte[]&gt rsaDecrypt(String rsaMod, String rsaPri, byte[] text) {
         Result&ltPrivateKey&gt privateKey = getPrivateKey(rsaMod, rsaPri);
         if (privateKey.Error != null) {
@@ -167,7 +169,8 @@ public class Crypto {
         }
     }
 
-    // rsaSign sign text and return signature use base64 encode.
+    // rsaSign sign text and return signature.
+    // 签名的时候用的是私钥，所以需要modulus和exponents。
     public static Result&ltbyte[]&gt rsaSign(String rsaMod, String rsaPri, byte[] text) {
         Result&ltPrivateKey&gt privateKey = getPrivateKey(rsaMod, rsaPri);
         if (privateKey.Error != null) {
@@ -183,6 +186,7 @@ public class Crypto {
     }
 
     // rsaVerify verify signature.
+    // 验证的时候用的是公钥，需要modulus和public expoentns。
     public static Result&ltBoolean&gt rsaVerify(String rsaMod, String rsaPub, byte[] text, byte[] signature) {
         Result&ltPublicKey&gt publicKey = getPublicKey(rsaMod, rsaPub);
         if (publicKey.Error != null) {
@@ -256,6 +260,7 @@ public class Crypto {
         }
     }
 
+    // 这里适用modulus和public expoennts生成公钥。
     private static Result&ltPublicKey&gt getPublicKey(String rsaMod, String rsaPub) {
         try {
             BigInteger modulusInt = new BigInteger(rsaMod, 10);
@@ -275,6 +280,7 @@ public class Crypto {
         }
     }
 
+    // 这里使用modulus和exponents生成私钥。
     private static Result&ltPrivateKey&gt getPrivateKey(String rsaMod, String rsaPri) {
         try {
             BigInteger modulusInt = new BigInteger(rsaMod, 10);
@@ -296,6 +302,7 @@ public class Crypto {
 
     // rsa pkcs1 sign and verify.
     // translate by go language crypto/rsa,pkcs1.
+    // 这是参照golang源码写的rsa签名方法。
     private static Result&ltbyte[]&gt sign(RSAPrivateKey pri, byte[] hashed) {
         int hashLen = hashed.length;
         int tLen = hashLen;
@@ -318,6 +325,7 @@ public class Crypto {
         return new Result&lt&gt(em);
     }
 
+    // 这是参照golang源码写的rsa验证方法。
     private static Result&ltBoolean&gt verify(RSAPublicKey pub, byte[] hashed, byte[] sig) {
         int hashLen = hashed.length;
         int tLen = hashLen;
@@ -347,6 +355,7 @@ public class Crypto {
         return new Result&lt&gt(true);
     }
 
+    // 这是参照golang源码写的方法。
     private static byte[] leftPad(byte[] input, int size) {
         int n = input.length;
         if (n &gt size) {
@@ -361,6 +370,7 @@ public class Crypto {
         return out;
     }
 
+    // 这是参照golang源码写的。
     private static void copyWithLeftPad(byte[] dest, byte[] src) {
         // java's biginteger to bytearray is include sig,
         // so should delete first byte.
@@ -375,6 +385,21 @@ public class Crypto {
         }
     }
 
+    // 这是参照golang源码写的。
+    // 其中有趣的是：这个方法是用来比较两个字节是否相等的，当然用==也可以，但是生成的汇编代码不一样（这是针对编译型语言，
+    // 这里直接照搬过来了）。
+    // x                            = 01010011
+    // y                            = 00010011
+    // x ^ y                       = 01000000
+    // ~(x^y)                     = 10111111 =&gt z
+    // z &gt&gt 4               = 00001011
+    // z &amp (z &gt&gt 4) = 00001011
+    // z                             = 00001011
+    // z &gt&gt 2               = 00000010
+    // z &amp (z &gt&gt 4) = 00000010
+    // z                             = 00001010
+    // z &gt&gt 1               = 00000001
+    // z &amp (z &gt&gt 1) = 00000000
     private static int constantTimeByteEq(byte x, byte y) {
         int z = ~(x ^ y);
         z &amp= z &gt&gt 4;
@@ -383,6 +408,7 @@ public class Crypto {
         return z;
     }
 
+    // 这是参照golang源码写的。
     private static int constantTimeCompare(byte[] x, int start, int end, byte[] y) {
         if (end - start != y.length) {
             return 0;
