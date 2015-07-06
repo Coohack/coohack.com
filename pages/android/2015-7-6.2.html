@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>golang java rsa 加密 签名 互通</title>
+    <link rel="stylesheet" href="https://coohack.github.io/src/code-prettify/loader/skins/desert.css">
+    <script type="text/javascript" src="https://coohack.github.io/src/code-prettify/loader/run_prettify.js"></script>
+    <style>
+    pre.prettyprint {
+        font-size: 20px;
+        overflow: auto;
+    }
+    </style>
+</head>
+<body>
+    <h1>golang java rsa 加密 签名 互通</h1>
+    <a href="https://coohack.github.io">博客首页</a>
+    <br>
+    <p>
+        前几天做了个通信软件，自建服务器，由于服务器用的golang（ps：个人非常喜欢golang，语法的简洁，并发的优美，还有一点就是依赖库一起编译，适用起来少了许多麻烦，
+        现在这么大的硬盘存储空间，根本不却那点动态库的位置，最主要的一点是opensource）。<br>
+        好了，说正题，rsa加密算法是现在通用的非对成加密，细节自行bing（某谷搜索引擎也用不了）。但是各种语言的实现细节还是有点区别的，唯一不变的是它们都是
+        做的大数运算（算法自行bing）。
+    </p>
+    <p>
+        由于需要客户端加密，签名，服务器也需要加密和签名。所以做起来就有点麻烦了。干脆所有细节以服务器为准，服务器用什么算法，客户端就用什么算法。<br>
+        这里golang适用了pkcs1格式的密钥，所以android中就要适用pkcs1格式。后来由于rsa签名及验证的时候一直不对，所以参照了golang的签名验证算法写了个android
+        版本的。所以这里rsa密钥的存储就只能用最原始的方法了，就是直接存储rsa中的三个大数：modulus、exponents和public exponents。做rsa加密解密及签名验证
+        都是用的这三个数。<br>
+        当服务器中生成rsa公钥及私钥的时候就可以获得这三个数并保存起来。其中加密用到了modulus和public exponents，java版本的解密用到了modulus和exponents。
+        而golang版本的解密三个数都需要。这是因为golang中创建私钥的时候需要验证（自行查看golang源码：crypto/rsa中）。
+    </p>
+    <p>
+        不废话了，golang中rsa的使用自行搜索。这里就贴出android中的加密解密及签名验证代码：
+    </p>
+    <pre class="prettyprint">
+package hack.android3.crypto;
+
+import java.math.BigInteger;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.KeyFactory;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.SecureRandom;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.RSAPrivateKeySpec;
+import java.security.spec.RSAPublicKeySpec;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.UUID;
+
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.KeyGenerator;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+
+import hack.android3.utility.Error;
+import hack.android3.utility.Result;
+
+public class Crypto {
+    static int gcRsaKeyLength = 512;
+    static int gcAesKeyLength = 128;
+    private static SimpleDateFormat dateFormat = new SimpleDateFormat("M/d H:m:s");
+
+    public static String getTime(long time) {
+        Date date = new Date(time * 1000);
+        return dateFormat.format(date);
+    }
+
+    // genUUID gen a uuid string.
+    public static String genUUID() {
+        return UUID.randomUUID().toString();
+    }
+
+    // getString get a string from byte array.
+    public static String getString(byte[] text) {
+        StringBuilder stringBuilder = new StringBuilder();
+        for (byte i : text) {
+            stringBuilder.append((char) i);
+        }
+        return stringBuilder.toString();
+    }
+
+    // genAesKey generate a random byte array.
+    public static byte[] genAesKey() {
+        try {
+            KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
+            keyGenerator.init(gcAesKeyLength);
+            return keyGenerator.generateKey().getEncoded();
+        } catch (NoSuchAlgorithmException e) {
+            return null;
+        }
+    }
+
+    // genRsaKey create a rsa key and return the modulus,public exponent and private exponent.
+    public static Result&ltString[]&gt genRsaKey() {
+        try {
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(gcRsaKeyLength, new SecureRandom());
+            KeyPair keyPair = keyPairGenerator.generateKeyPair();
+            RSAPublicKey publicKey = (RSAPublicKey) keyPair.getPublic();
+            RSAPrivateKey privateKey = (RSAPrivateKey) keyPair.getPrivate();
+            Result&ltString[]&gt result = new Result&lt&gt();
+            result.Result = new String[3];
+            result.Result[0] = publicKey.getModulus().toString();
+            result.Result[1] = publicKey.getPublicExponent().toString();
+            result.Result[2] = privateKey.getPrivateExponent().toString();
+            return result;
+        } catch (NoSuchAlgorithmException e) {
+            return new Result&lt&gt(e);
+        }
+    }
+
+    // rsaEncrypt encrypt data use rsa algorithm and base64 encode result.
+    public static Result&ltbyte[]&gt rsaEncrypt(String rsaMod, String rsaPub, byte[] text) {
+        Result&ltPublicKey&gt publicKey = getPublicKey(rsaMod, rsaPub);
+        if (publicKey.Error != null) {
+            return new Result&lt&gt(publicKey.Error);
+        }
+        try {
+            Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1PADDING");
+            cipher.init(Cipher.ENCRYPT_MODE, publicKey.Result);
+            return new Result&lt&gt(cipher.doFinal(text));
+        } catch (NoSuchAlgorithmException e) {
+            return new Result&lt&gt(e);
+        } catch (NoSuchPaddingException e) {
+            return new Result&lt&gt(e);
+        } catch (InvalidKeyException e) {
+            return new Result&lt&gt(e);
+        } catch (IllegalBlockSizeException e) {
+            return new Result&lt&gt(e);
+        } catch (BadPaddingException e) {
+            return new Result&lt&gt(e);
+        }
+    }
+
+    // rsaDecrypt decrypt data use rsa algorithm.
+    public static Result&ltbyte[]&gt rsaDecrypt(String rsaMod, String rsaPri, byte[] text) {
+        Result&ltPrivateKey&gt privateKey = getPrivateKey(rsaMod, rsaPri);
+        if (privateKey.Error != null) {
+            return new Result&lt&gt(privateKey.Error);
+        }
+        try {
+            Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1PADDING");
+            cipher.init(Cipher.DECRYPT_MODE, privateKey.Result);
+            return new Result&lt&gt(cipher.doFinal(text));
+        } catch (NoSuchAlgorithmException e) {
+            return new Result&lt&gt(e);
+        } catch (NoSuchPaddingException e) {
+            return new Result&lt&gt(e);
+        } catch (InvalidKeyException e) {
+            return new Result&lt&gt(e);
+        } catch (BadPaddingException e) {
+            return new Result&lt&gt(e);
+        } catch (IllegalBlockSizeException e) {
+            return new Result&lt&gt(e);
+        }
+    }
+
+    // rsaSign sign text and return signature use base64 encode.
+    public static Result&ltbyte[]&gt rsaSign(String rsaMod, String rsaPri, byte[] text) {
+        Result&ltPrivateKey&gt privateKey = getPrivateKey(rsaMod, rsaPri);
+        if (privateKey.Error != null) {
+            return new Result&lt&gt(privateKey.Error);
+        }
+        try {
+            MessageDigest sha1 = MessageDigest.getInstance("SHA1");
+            sha1.update(text);
+            return sign((RSAPrivateKey) privateKey.Result, sha1.digest());
+        } catch (NoSuchAlgorithmException e) {
+            return new Result&lt&gt(e);
+        }
+    }
+
+    // rsaVerify verify signature.
+    public static Result&ltBoolean&gt rsaVerify(String rsaMod, String rsaPub, byte[] text, byte[] signature) {
+        Result&ltPublicKey&gt publicKey = getPublicKey(rsaMod, rsaPub);
+        if (publicKey.Error != null) {
+            return new Result&lt&gt(publicKey.Error);
+        }
+        try {
+            MessageDigest sha1 = MessageDigest.getInstance("SHA1");
+            sha1.update(text);
+            return verify((RSAPublicKey) publicKey.Result, sha1.digest(), signature);
+        } catch (NoSuchAlgorithmException e) {
+            return new Result&lt&gt(e);
+        }
+    }
+
+    // md5Encrypt encrypt data use md5 algorithm and hex encode result.
+    public static Result&ltString&gt md5Encrypt(String data) {
+        try {
+            MessageDigest md5 = MessageDigest.getInstance("MD5");
+            md5.update(data.getBytes());
+            byte[] encryptedData = md5.digest();
+            // get hex string
+            StringBuilder stringBuilder = new StringBuilder(32);
+            for (byte b : encryptedData) {
+                stringBuilder.append(Integer.toHexString(0xFF &amp b));
+            }
+            return new Result&lt&gt(stringBuilder.toString());
+        } catch (NoSuchAlgorithmException e) {
+            return new Result&lt&gt(e);
+        }
+    }
+
+    public static Result&ltbyte[]&gt aesEncrypt(byte[] key, byte[] text) {
+        try {
+            SecretKeySpec secretKeySpec = new SecretKeySpec(key, "AES");
+            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, new IvParameterSpec(key));
+            return new Result&lt&gt(cipher.doFinal(text));
+        } catch (IllegalBlockSizeException e) {
+            return new Result&lt&gt(Error.New(e.getMessage()));
+        } catch (InvalidKeyException e) {
+            return new Result&lt&gt(Error.New(e.getMessage()));
+        } catch (BadPaddingException e) {
+            return new Result&lt&gt(Error.New(e.getMessage()));
+        } catch (NoSuchAlgorithmException e) {
+            return new Result&lt&gt(Error.New(e.getMessage()));
+        } catch (NoSuchPaddingException e) {
+            return new Result&lt&gt(Error.New(e.getMessage()));
+        } catch (InvalidAlgorithmParameterException e) {
+            return new Result&lt&gt(Error.New(e.getMessage()));
+        }
+    }
+
+    public static Result&ltbyte[]&gt aesDecrypt(byte[] key, byte[] text) {
+        try {
+            SecretKeySpec secretKeySpec = new SecretKeySpec(key, "AES");
+            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, new IvParameterSpec(key));
+            return new Result&lt&gt(cipher.doFinal(text));
+        } catch (IllegalBlockSizeException e) {
+            return new Result&lt&gt(e);
+        } catch (InvalidKeyException e) {
+            return new Result&lt&gt(e);
+        } catch (BadPaddingException e) {
+            return new Result&lt&gt(e);
+        } catch (NoSuchAlgorithmException e) {
+            return new Result&lt&gt(e);
+        } catch (NoSuchPaddingException e) {
+            return new Result&lt&gt(e);
+        } catch (InvalidAlgorithmParameterException e) {
+            return new Result&lt&gt(e);
+        }
+    }
+
+    private static Result&ltPublicKey&gt getPublicKey(String rsaMod, String rsaPub) {
+        try {
+            BigInteger modulusInt = new BigInteger(rsaMod, 10);
+            BigInteger publicExponentInt = new BigInteger(rsaPub, 10);
+            // create public key
+            RSAPublicKeySpec publicKeySpec = new RSAPublicKeySpec(modulusInt, publicExponentInt);
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            return new Result&lt&gt(keyFactory.generatePublic(publicKeySpec));
+        } catch (NullPointerException e) {
+            return new Result&lt&gt(e);
+        } catch (NumberFormatException e) {
+            return new Result&lt&gt(e);
+        } catch (NoSuchAlgorithmException e) {
+            return new Result&lt&gt(e);
+        } catch (InvalidKeySpecException e) {
+            return new Result&lt&gt(e);
+        }
+    }
+
+    private static Result&ltPrivateKey&gt getPrivateKey(String rsaMod, String rsaPri) {
+        try {
+            BigInteger modulusInt = new BigInteger(rsaMod, 10);
+            BigInteger privateExponentInt = new BigInteger(rsaPri, 10);
+            // create private key
+            RSAPrivateKeySpec privateKeySpec = new RSAPrivateKeySpec(modulusInt, privateExponentInt);
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            return new Result&lt&gt(keyFactory.generatePrivate(privateKeySpec));
+        } catch (NullPointerException e) {
+            return new Result&lt&gt(e);
+        } catch (NumberFormatException e) {
+            return new Result&lt&gt(e);
+        } catch (NoSuchAlgorithmException e) {
+            return new Result&lt&gt(e);
+        } catch (InvalidKeySpecException e) {
+            return new Result&lt&gt(e);
+        }
+    }
+
+    // rsa pkcs1 sign and verify.
+    // translate by go language crypto/rsa,pkcs1.
+    private static Result&ltbyte[]&gt sign(RSAPrivateKey pri, byte[] hashed) {
+        int hashLen = hashed.length;
+        int tLen = hashLen;
+        int k = (pri.getModulus().bitLength() + 7) / 8;
+        if (k &lt tLen + 11) {
+            return new Result&lt&gt(Error.New("the k &lt tLen"));
+        }
+        byte[] em = new byte[k];
+        em[1] = (byte) 1;
+        for (int i = 2; i &lt k - tLen - 1; i++) {
+            em[i] = (byte) 0xff;
+        }
+        System.arraycopy(hashed, 0, em, k - hashLen, hashed.length);
+        BigInteger m = new BigInteger(em);
+        if (m.compareTo(pri.getModulus()) &gt 0) {
+            return new Result&lt&gt(Error.New("the m &gt pri.getModulus()"));
+        }
+        BigInteger c = m.modPow(pri.getPrivateExponent(), pri.getModulus());
+        copyWithLeftPad(em, c.toByteArray());
+        return new Result&lt&gt(em);
+    }
+
+    private static Result&ltBoolean&gt verify(RSAPublicKey pub, byte[] hashed, byte[] sig) {
+        int hashLen = hashed.length;
+        int tLen = hashLen;
+        int k = (pub.getModulus().bitLength() + 7) / 8;
+        if (k &lt tLen + 11) {
+            return new Result&lt&gt(Error.New("the k &lt tLen"));
+        }
+        // add sign bytes to sig head.
+        byte[] sig2 = new byte[sig.length + 1];
+        sig2[0] = (byte) 0;
+        System.arraycopy(sig, 0, sig2, 1, sig.length);
+        BigInteger c = new BigInteger(sig2);
+        BigInteger m = c.modPow(pub.getPublicExponent(), pub.getModulus());
+        byte[] em = leftPad(m.toByteArray(), k);
+
+        int ok = constantTimeByteEq(em[0], (byte) 0);
+        ok &amp= constantTimeByteEq(em[1], (byte) 1);
+        ok &amp= constantTimeCompare(em, k - hashLen, k, hashed);
+        ok &amp= constantTimeByteEq(em[k - tLen - 1], (byte) 0);
+
+        for (int i = 2; i &lt k - tLen - 1; i++) {
+            ok &amp= constantTimeByteEq(em[i], (byte) 0xff);
+        }
+        if (ok != -1) {
+            return new Result&lt&gt(Error.New("ok is not -1"));
+        }
+        return new Result&lt&gt(true);
+    }
+
+    private static byte[] leftPad(byte[] input, int size) {
+        int n = input.length;
+        if (n &gt size) {
+            n = size;
+        }
+        byte[] out = new byte[size];
+        if (input.length &gt out.length) {
+            System.arraycopy(input, 1, out, out.length - n, input.length - 1);
+        } else {
+            System.arraycopy(input, 0, out, out.length - n, input.length);
+        }
+        return out;
+    }
+
+    private static void copyWithLeftPad(byte[] dest, byte[] src) {
+        // java's biginteger to bytearray is include sig,
+        // so should delete first byte.
+        int numPaddingBytes = dest.length - src.length;
+        for (int i = 0; i &lt numPaddingBytes; i++) {
+            dest[i] = 0;
+        }
+        if (src.length &gt dest.length) {
+            System.arraycopy(src, 1, dest, numPaddingBytes + 1, src.length - 1);
+        } else {
+            System.arraycopy(src, 0, dest, numPaddingBytes, src.length);
+        }
+    }
+
+    private static int constantTimeByteEq(byte x, byte y) {
+        int z = ~(x ^ y);
+        z &amp= z &gt&gt 4;
+        z &amp= z &gt&gt 2;
+        z &amp= z &gt&gt 1;
+        return z;
+    }
+
+    private static int constantTimeCompare(byte[] x, int start, int end, byte[] y) {
+        if (end - start != y.length) {
+            return 0;
+        }
+        byte v = 0;
+        for (int i = 0; i &lt y.length; i++) {
+            v |= x[start + i] ^ y[i];
+        }
+        return constantTimeByteEq(v, (byte) 0);
+    }
+}
+    </pre>
+    <p>
+    </p>
+    <footer>
+        结束语：
+        <br>
+        由于手写html，没有做留言功能，在此留下邮箱，欢迎交流：coohacker00@qq.com
+        <br>
+        <br>
+        <br>
+    </footer>
+</body>
+</html>
