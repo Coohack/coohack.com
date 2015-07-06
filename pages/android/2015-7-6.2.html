@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>安卓activity背景透明</title>
+    <link rel="stylesheet" href="http://coohack.github.io/src/code-prettify/loader/skins/desert.css">
+    <script type="text/javascript" src="http://coohack.github.io/src/code-prettify/loader/run_prettify.js"></script>
+    <style>
+    pre.prettyprint {
+        font-size: 20px;
+        overflow: auto;
+    }
+    </style>
+</head>
+<body>
+    <h1>安卓activity背景透明</h1>
+    <p>
+        现在的电子设备运行速度越来越快了，摩尔定律适用于硬件设备，同时也适用于软件对硬件的需求，在以前内存是按kb
+        计算的情况下，软件一样可以运行得很好，甚至是可以用来玩游戏（真不敢想象，现在4g的内存都得省着用）。
+        <br>
+        好了，言归正传，来说一说如何作出炫酷的背景透明activity。
+        <br>
+        先上一张效果图（这是昨天写博客用的图）：
+        <img src="https://coohack.github.io/src/img/device-2015-07-05-195131.png" width="300"/>
+        <br>
+        可以看到一个蓝色的弹出窗口用来选择文件，没错，蓝色圆角的部分是一个窗口，这是因为这个activity的背景
+        是透明的，所以边缘部分可以看到下面一层的activity（那是一个显示代码的activity，这个apk是用来做代码浏览器
+        的，代码高亮是必须的）。
+    </p>
+    <p>
+        下面就来说一说怎么把activity背景做透明吧：
+        <br>
+        直接上代码吧，第一个是style文件，其中上面的style是activity的style，应该在manifests文件中对应的activity声明中
+        用theme方式引用，下面的style是蓝色圆角的listview用来选择文件，其中设置了margin，这就可以让它和activity
+        的边缘隔出一段距离来显示出下面那层activity了。
+    </p>
+    <pre class="prettyprint">
+&lt!--this is style file--&gt
+&lt?xml version="1.0" encoding="utf-8"?&gt
+&ltresources&gt
+    &lt!--select file activity--&gt
+    &ltstyle name="SelectFileActivity" parent="android:Theme.Holo.NoActionBar"&gt
+        &ltitem name="android:windowIsTranslucent"&gttrue&lt/item&gt
+        &ltitem name="android:windowBackground"&gt@android:color/transparent&lt/item&gt
+        &ltitem name="android:windowAnimationStyle"&gt@android:style/Animation.Dialog&lt/item&gt
+    &lt/style&gt
+
+    &ltstyle name="SelectFileList"&gt
+        &ltitem name="android:layout_width"&gtmatch_parent&lt/item&gt
+        &ltitem name="android:layout_height"&gtmatch_parent&lt/item&gt
+        &ltitem name="android:layout_margin"&gt@dimen/select_file_list_margin&lt/item&gt
+        &ltitem name="android:padding"&gt@dimen/select_file_list_padding&lt/item&gt
+        &ltitem name="android:background"&gt@drawable/select_file_list_background&lt/item&gt
+    &lt/style&gt
+&lt/resources&gt
+    </pre>
+    <p>
+        这里是manifests文件的application部分，其中SelectFileActivity中设置了theme引用了刚刚的样式。
+    </p>
+    <pre class="prettyprint">
+&lt!--this is manifests's section of application--&gt
+&ltapplication
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme"&gt
+        &ltactivity
+            android:name=".activity.MainActivity"
+            android:theme="@style/AppTheme"&gt
+            &ltintent-filter&gt
+                &ltaction android:name="android.intent.action.MAIN"/&gt
+                &ltcategory android:name="android.intent.category.LAUNCHER"/&gt
+            &lt/intent-filter&gt
+        &lt/activity&gt
+        &ltactivity
+            android:name=".activity.SelectFileActivity"
+            android:theme="@style/SelectFileActivity"/&gt
+    &lt/application&gt
+    </pre>
+    <p>
+    </p>
+    <p>
+        结束语：<br>
+        其实只要慢慢的了解了原理，后面的开发就轻松些了，安卓的机制还是挺好的。
+        这里就免不了要喷以下国内的应用厂商了，各种广告、各种后台服务，当然只是一部分（请叫我喷喷）。
+        <br>
+        由于想在我的代码浏览器中加入git功能，所以上github中找了个android的git库，没想到找到了一个和我想法一样的
+        软件，已经在安卓官方应用商店上架，哎，很久以前想下个代码浏览器，无奈国内的应用商店里没有中意的，今天机缘巧合，
+        让我在github中碰到了，索性自己编译了一个，但是适用起来发现两个bug，其一是代码高亮的问题，java代码的注释
+        会影响后面的代码，导致只能正常高亮最后一块代码，前面的都被注释了，还有一个就是当适用git来checkout
+        版本以后，第一次进入版本库会奔溃，暂时还没有看源码，所以不知道bug在哪里，以后有时间再看吧，
+        <br>
+        想要的同学可以自己编译一个，这里给出地址https://github.com/andrewromanenco/git.android.git
+        <br>
+        只需要导入到androidstudio中就可以编译了。在此谢谢作者，因为我找到了android的git库。
+    </p>
+    <footer>
+        由于手写html，没有做留言功能，在此留下邮箱，欢迎交流：coohacker00@qq.com
+    </footer>
+    <br>
+    <br>
+    <br>
+</body>
+</html>
