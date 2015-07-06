@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>安卓版本适配</title>
+    <link rel="stylesheet" href="http://coohack.github.io/src/code-prettify/loader/skins/desert.css">
+    <script type="text/javascript" src="http://coohack.github.io/src/code-prettify/loader/run_prettify.js"></script>
+    <style>
+    pre.prettyprint {
+        font-size: 20px;
+        overflow: auto;
+    }
+    </style>
+</head>
+<body>
+    <h1>安卓版本适配</h1>
+    <p>
+        随着系统的升级，安卓sdk中的api也增加了很多的api，但是随之而来的问题就是如何开发出能适用于各种系统版本的apk，
+        当然，你也可以为每个版本适配一个apk，但是这样的话工作量就相当大了，后期维护和添加功能也是相当麻烦。
+        在androidstudio的帮助下，我们可以把大部分的问题解决了。你可以像适配屏幕一样来适配api版本，在androidstudio中
+        新建styles文件的时候可以选择对应的版本来使用，这样我们的apk在运行的时候会自动选择相应的文件来运行。
+    </p>
+    <p>
+        这里先上一张图：
+    </p>
+    <img src="https://coohack.github.io/src/img/2015-7-6/screenshot-2015-07-06-1.png"/>
+    <p>
+        可以看到左边的styles文件夹下有两个styles文件，并且文件名后面有个v15和v21的标记，这样apk在运行的时候就会
+        根据当前系统的版本来选择使用合适的文件。
+        <br>
+        这里我是把布局文件和styles文件分离，这样以后修改起来比较方便。也可以新建对应版本的layout文件，方法和上面的一样，。
+        其实在androidstudio里面的资源文件都是可以按版本来使用的，包括drawable、layout、mipmap、values中的各种
+        都可以，还是挺强大的。
+    </p>
+    <p>
+    </p>
+    <footer>
+    </footer>
+</body>
+</html>
